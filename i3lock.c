@@ -38,6 +38,7 @@
 #ifdef __OpenBSD__
 #include <strings.h> /* explicit_bzero(3) */
 #endif
+#include <signal.h>
 
 #include "i3lock.h"
 #include "xcb.h"
@@ -150,8 +151,34 @@ static uint8_t xkb_base_error;
 cairo_surface_t *img = NULL;
 cairo_surface_t *blur_img = NULL;
 bool tile = false;
+char *image_path = NULL;
 bool ignore_empty_password = false;
 bool skip_repeated_empty_password = false;
+
+static void load_image(void)
+{
+    if (img) {
+        cairo_surface_destroy(img);
+    }
+
+    if (image_path) {
+        /* Create a pixmap to render on, fill it with the background color */
+        img = cairo_image_surface_create_from_png(image_path);
+        /* In case loading failed, we just pretend no -i was specified. */
+        if (cairo_surface_status(img) != CAIRO_STATUS_SUCCESS) {
+            if (debug_mode)
+                fprintf(stderr, "Could not load image \"%s\": cairo surface status %d\n",
+                        image_path, cairo_surface_status(img));
+            img = NULL;
+        }
+    }
+}
+
+static void reload_image(int signame)
+{
+    load_image();
+    redraw_screen();
+}
 
 /* isutf, u8_dec © 2005 Jeff Bezanson, public domain */
 #define isutf(c) (((c)&0xC0) != 0x80)
@@ -883,7 +910,6 @@ static void raise_loop(xcb_window_t window) {
 int main(int argc, char *argv[]) {
     struct passwd *pw;
     char *username;
-    char *image_path = NULL;
 #ifndef __OpenBSD__
     int ret;
     struct pam_conv conv = {conv_callback, NULL};
@@ -1398,17 +1424,9 @@ int main(int argc, char *argv[]) {
     xcb_change_window_attributes(conn, screen->root, XCB_CW_EVENT_MASK,
                                  (uint32_t[]){XCB_EVENT_MASK_STRUCTURE_NOTIFY});
 
-    if (image_path) {
-        /* Create a pixmap to render on, fill it with the background color */
-        img = cairo_image_surface_create_from_png(image_path);
-        /* In case loading failed, we just pretend no -i was specified. */
-        if (cairo_surface_status(img) != CAIRO_STATUS_SUCCESS) {
-            fprintf(stderr, "Could not load image \"%s\": %s\n",
-                    image_path, cairo_status_to_string(cairo_surface_status(img)));
-            img = NULL;
-        }
-        free(image_path);
-    }
+    load_image();
+
+    signal(SIGUSR2, &reload_image);
 
     xcb_pixmap_t* blur_pixmap = NULL;
     if (blur) {
