@@ -154,8 +154,9 @@ bool tile = false;
 char *image_path = NULL;
 bool ignore_empty_password = false;
 bool skip_repeated_empty_password = false;
+bool reload_image_triggered = false;
 
-static void load_image(void)
+void load_image(void)
 {
     if (img) {
         cairo_surface_destroy(img);
@@ -174,10 +175,9 @@ static void load_image(void)
     }
 }
 
-static void reload_image(int signame)
+static void trigger_reload_image(int signame)
 {
-    load_image();
-    redraw_screen();
+    reload_image_triggered = true;
 }
 
 /* isutf, u8_dec © 2005 Jeff Bezanson, public domain */
@@ -1426,7 +1426,6 @@ int main(int argc, char *argv[]) {
 
     load_image();
 
-    signal(SIGUSR2, &reload_image);
 
     xcb_pixmap_t* blur_pixmap = NULL;
     if (blur) {
@@ -1476,6 +1475,8 @@ int main(int argc, char *argv[]) {
         exit(EXIT_SUCCESS);
     }
 
+    signal(SIGUSR2, &trigger_reload_image);
+
     /* Load the keymap again to sync the current modifier state. Since we first
      * loaded the keymap, there might have been changes, but starting from now,
      * we should get all key presses/releases due to having grabbed the
@@ -1508,8 +1509,6 @@ int main(int argc, char *argv[]) {
      * received up until now. ev will only pick up new events (when the X11
      * file descriptor becomes readable). */
     ev_invoke(main_loop, xcb_check, 0);
-    if (show_clock) {
-        start_time_redraw_tick(main_loop);
-    }
+    start_time_redraw_tick(main_loop);
     ev_loop(main_loop, 0);
 }

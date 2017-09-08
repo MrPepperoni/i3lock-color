@@ -60,6 +60,8 @@ extern char *modifier_string;
 extern cairo_surface_t *img;
 extern cairo_surface_t *blur_img;
 
+extern bool reload_image_triggered;
+
 /* Whether the image should be tiled. */
 extern bool tile;
 /* The background color to use (in hex). */
@@ -741,8 +743,18 @@ void clear_indicator(void) {
     redraw_screen();
 }
 
+extern void load_image(void);
 static void time_redraw_cb(struct ev_loop *loop, ev_periodic *w, int revents) {
-    redraw_screen();
+    bool do_redraw = show_clock || reload_image_triggered;
+    if (reload_image_triggered)
+    {
+        reload_image_triggered = false;
+        load_image();
+    }
+    if (do_redraw)
+    {
+        redraw_screen();
+    }
 }
 
 void start_time_redraw_tick(struct ev_loop* main_loop) {
